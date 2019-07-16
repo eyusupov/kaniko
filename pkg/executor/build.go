@@ -222,6 +222,7 @@ func (s *stageBuilder) build() error {
 	if err := util.DetectFilesystemWhitelist(constants.WhitelistPath); err != nil {
 		return err
 	}
+
 	// Take initial snapshot
 	t := timing.Start("Initial FS snapshot")
 	if err := s.snapshotter.Init(); err != nil {
@@ -253,9 +254,20 @@ func (s *stageBuilder) build() error {
 		if err := command.ExecuteCommand(&s.cf.Config, s.args); err != nil {
 			return err
 		}
-		files = command.FilesToSnapshot()
 		timing.DefaultRun.Stop(t)
 
+		cacheImg := command.CacheImage()
+		if cacheImg != nil {
+			layers, err := cacheImg.Layers()
+			if err != nil {
+				logrus.Debugf("Failed to retrieve layer from cache image: %s", err)
+				continue
+			}
+			s.addLayerToImage(command.String(), layers[0])
+			continue
+		}
+
+		files = command.FilesToSnapshot()
 		if !s.shouldTakeSnapshot(index, files) {
 			continue
 		}
@@ -269,6 +281,7 @@ func (s *stageBuilder) build() error {
 		if err != nil {
 			return err
 		}
+
 		// Push layer to cache (in parallel) now along with new config file
 		if s.opts.Cache && command.ShouldCacheOutput() {
 			cacheGroup.Go(func() error {
@@ -326,6 +339,21 @@ func (s *stageBuilder) shouldTakeSnapshot(index int, files []string) bool {
 	return true
 }
 
+func (s *stageBuilder) addLayerToImage(createdBy string, layer v1.Layer) error {
+	logrus.Infof("Adding cached layer for command %s to the image", createdBy)
+	var err error
+	s.image, err = mutate.Append(s.image,
+		mutate.Addendum{
+			Layer: layer,
+			History: v1.History{
+				Author:    constants.Author,
+				CreatedBy: createdBy,
+			},
+		},
+	)
+	return err
+}
+
 func (s *stageBuilder) saveSnapshotToImage(createdBy string, tarPath string) error {
 	if tarPath == "" {
 		return nil
@@ -343,6 +371,7 @@ func (s *stageBuilder) saveSnapshotToImage(createdBy string, tarPath string) err
 	if err != nil {
 		return err
 	}
+
 	s.image, err = mutate.Append(s.image,
 		mutate.Addendum{
 			Layer: layer,
@@ -353,7 +382,6 @@ func (s *stageBuilder) saveSnapshotToImage(createdBy string, tarPath string) err
 		},
 	)
 	return err
-
 }
 
 func CalculateDependencies(opts *config.KanikoOptions) (map[int][]string, error) {
