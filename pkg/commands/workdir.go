@@ -37,9 +37,7 @@ type WorkdirCommand struct {
 // For testing
 var mkdir = os.MkdirAll
 
-func (w *WorkdirCommand) ExecuteCommand(config *v1.Config, buildArgs *dockerfile.BuildArgs) error {
-	logrus.Info("cmd: workdir")
-	workdirPath := w.cmd.Path
+func updateWorkdir(workdirPath string, config *v1.Config, buildArgs *dockerfile.BuildArgs) error {
 	replacementEnvs := buildArgs.ReplacementEnvs(config.Env)
 	resolvedWorkingDir, err := util.ResolveEnvironmentReplacement(workdirPath, replacementEnvs, true)
 	if err != nil {
@@ -51,6 +49,17 @@ func (w *WorkdirCommand) ExecuteCommand(config *v1.Config, buildArgs *dockerfile
 		config.WorkingDir = filepath.Join(config.WorkingDir, resolvedWorkingDir)
 	}
 	logrus.Infof("Changed working directory to %s", config.WorkingDir)
+	return nil
+}
+
+func (w *WorkdirCommand) ExecuteCommand(config *v1.Config, buildArgs *dockerfile.BuildArgs) error {
+	logrus.Info("cmd: workdir")
+
+	workdirPath := w.cmd.Path
+	err := updateWorkdir(workdirPath, config, buildArgs)
+	if err != nil {
+		return err
+	}
 
 	// Only create and snapshot the dir if it didn't exist already
 	w.snapshotFiles = []string{}
@@ -74,4 +83,35 @@ func (w *WorkdirCommand) String() string {
 
 func (w *WorkdirCommand) MetadataOnly() bool {
 	return false
+}
+
+func (r *WorkdirCommand) RequiresUnpackedFS() bool {
+	return true
+}
+
+func (r *WorkdirCommand) ShouldCacheOutput() bool {
+	return true
+}
+
+func (r *CachedWorkdirCommand) CacheCommand() DockerCommand {
+	return &CachedWorkdirCommand{cmd: r.cmd}
+}
+
+type CachedWorkdirCommand struct {
+	BaseCommand
+	cmd *instructions.WorkdirCommand
+}
+
+func (cw *CachedWorkdirCommand) ExecuteCommand(config *v1.Config, buildArgs *dockerfile.BuildArgs) error {
+	logrus.Info("cmd: workdir")
+
+	return updateWorkdir(cw.cmd.Path, config, buildArgs)
+}
+
+func (cw *CachedWorkdirCommand) MetadataOnly() bool {
+	return true
+}
+
+func (cw *CachedWorkdirCommand) String() string {
+	return cw.cmd.String()
 }
