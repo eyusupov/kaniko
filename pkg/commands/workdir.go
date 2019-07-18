@@ -67,6 +67,9 @@ func (w *WorkdirCommand) ExecuteCommand(config *v1.Config, buildArgs *dockerfile
 		logrus.Infof("Creating directory %s", config.WorkingDir)
 		w.snapshotFiles = append(w.snapshotFiles, config.WorkingDir)
 		return mkdir(config.WorkingDir, 0755)
+	} else {
+		// Cache the empty layer so we don't have to unpack FS on rerun
+		return nil
 	}
 	return nil
 }
