@@ -67,10 +67,8 @@ func (w *WorkdirCommand) ExecuteCommand(config *v1.Config, buildArgs *dockerfile
 		logrus.Infof("Creating directory %s", config.WorkingDir)
 		w.snapshotFiles = append(w.snapshotFiles, config.WorkingDir)
 		return mkdir(config.WorkingDir, 0755)
-	} else {
-		// Cache the empty layer so we don't have to unpack FS on rerun
-		return nil
 	}
+	// Cache the empty layer so we don't have to unpack FS on rerun
 	return nil
 }
 
@@ -88,16 +86,16 @@ func (w *WorkdirCommand) MetadataOnly() bool {
 	return false
 }
 
-func (r *WorkdirCommand) RequiresUnpackedFS() bool {
+func (w *WorkdirCommand) RequiresUnpackedFS() bool {
 	return true
 }
 
-func (r *WorkdirCommand) ShouldCacheOutput() bool {
+func (w *WorkdirCommand) ShouldCacheOutput() bool {
 	return true
 }
 
-func (r *CachedWorkdirCommand) CacheCommand() DockerCommand {
-	return &CachedWorkdirCommand{cmd: r.cmd}
+func (w *WorkdirCommand) CacheCommand() DockerCommand {
+	return &CachedWorkdirCommand{cmd: w.cmd}
 }
 
 type CachedWorkdirCommand struct {
