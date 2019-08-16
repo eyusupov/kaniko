@@ -57,6 +57,9 @@ type DockerCommand interface {
 
 	// Sets the cache image for the command's layer
 	SetCacheImage(cache v1.Image)
+
+	// Returns source stage (for COPY --from command), -1 if current
+	From() string
 }
 
 func GetCommand(cmd instructions.Command, buildcontext string) (DockerCommand, error) {

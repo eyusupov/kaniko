@@ -1,0 +1,12 @@
+FROM busybox:latest as builder
+ENV dir /var
+
+RUN echo 1 > ${dir}/file
+
+FROM busybox:latest as builder2
+RUN echo 2 > ${dir}/file2
+
+FROM busybox:latest
+RUN echo 3 >> ${dir}/file3
+COPY --from=builder ${dir}/file /file
+COPY --from=builder2 ${dir}/file2 /file

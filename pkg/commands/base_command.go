@@ -56,3 +56,7 @@ func (b *BaseCommand) SetCacheImage(cache v1.Image) {
 func (b *BaseCommand) ShouldCacheOutput() bool {
 	return false
 }
+
+func (b *BaseCommand) From() string {
+	return ""
+}

@@ -1,0 +1,2 @@
+FROM scratch
+COPY --from=fedora:latest /usr/lib/fedora-release /tmp/fedora-release

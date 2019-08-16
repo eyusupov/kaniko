@@ -19,6 +19,7 @@ package commands
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/sirupsen/logrus"
@@ -40,7 +41,14 @@ type CopyCommand struct {
 func (c *CopyCommand) ExecuteCommand(config *v1.Config, buildArgs *dockerfile.BuildArgs) error {
 	// Resolve from
 	if c.cmd.From != "" {
-		c.buildcontext = filepath.Join(constants.KanikoDir, c.cmd.From)
+		_, err := strconv.Atoi(c.cmd.From)
+		if err != nil {
+			// Copying files from an image
+			c.buildcontext = filepath.Join(constants.KanikoDir, c.cmd.From)
+		} else {
+			// Copying files from the (current) stage
+			c.buildcontext = "/"
+		}
 	}
 
 	replacementEnvs := buildArgs.ReplacementEnvs(config.Env)
@@ -50,7 +58,7 @@ func (c *CopyCommand) ExecuteCommand(config *v1.Config, buildArgs *dockerfile.Bu
 		return err
 	}
 
-	// For each source, iterate through and copy it over
+	// For each source, iterate through and maybe copy it over
 	for _, src := range srcs {
 		fullPath := filepath.Join(c.buildcontext, src)
 		fi, err := os.Lstat(fullPath)
@@ -64,8 +72,7 @@ func (c *CopyCommand) ExecuteCommand(config *v1.Config, buildArgs *dockerfile.Bu
 		destPath, err := util.DestinationFilepath(src, dest, cwd)
 		if err != nil {
 			return err
-		}
-		if fi.IsDir() {
+		} else if fi.IsDir() {
 			if !filepath.IsAbs(dest) {
 				// we need to add '/' to the end to indicate the destination is a directory
 				dest = filepath.Join(cwd, dest) + "/"
@@ -131,6 +138,14 @@ func (c *CopyCommand) FilesUsedFromContext(config *v1.Config, buildArgs *dockerf
 	return files, nil
 }
 
+func (c *CopyCommand) ShouldCacheOutput() bool {
+	return c.cmd.From != ""
+}
+
 func (c *CopyCommand) MetadataOnly() bool {
 	return false
+}
+
+func (c *CopyCommand) From() string {
+	return c.cmd.From
 }

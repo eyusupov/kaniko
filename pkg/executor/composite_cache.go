@@ -22,7 +22,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/GoogleContainerTools/kaniko/pkg/commands"
+	"github.com/GoogleContainerTools/kaniko/pkg/dockerfile"
 	"github.com/GoogleContainerTools/kaniko/pkg/util"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
 // NewCompositeCache returns an initialized composite cache object.
@@ -36,6 +39,21 @@ func NewCompositeCache(initial ...string) *CompositeCache {
 // CompositeCache is a type that generates a cache key from a series of keys.
 type CompositeCache struct {
 	keys []string
+}
+
+func (s *CompositeCache) AddCommand(command commands.DockerCommand, args *dockerfile.BuildArgs, config *v1.Config) error {
+	s.AddKey(command.String())
+	// If the command uses files from the context, add them.
+	files, err := command.FilesUsedFromContext(config, args)
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		if err := s.AddPath(f); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AddKey adds the specified key to the sequence.
@@ -77,6 +95,10 @@ func (s *CompositeCache) AddPath(p string) error {
 
 	s.keys = append(s.keys, string(sha.Sum(nil)))
 	return nil
+}
+
+func (s CompositeCache) Copy() *CompositeCache {
+	return NewCompositeCache(s.keys...)
 }
 
 // HashDir returns a hash of the directory.
