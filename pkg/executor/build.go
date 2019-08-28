@@ -264,7 +264,7 @@ func (s *stageBuilder) optimize(cfg v1.Config) (bool, error) {
 	return shouldUnpack, nil
 }
 
-func (s *stageBuilder) build(index int) error {
+func (s *stageBuilder) build(index int, cacheGroup *errgroup.Group) error {
 	logrus.Infof("Base image digest is %s", s.baseImageDigest)
 
 	// Apply optimizations to the instructions.
@@ -295,7 +295,6 @@ func (s *stageBuilder) build(index int) error {
 		timing.DefaultRun.Stop(t)
 	}
 
-	cacheGroup := errgroup.Group{}
 	snapshotInitialized := false
 
 	// Set the initial cache key to be the base image digest, the build args and the SrcContext.
@@ -431,10 +430,6 @@ func (s *stageBuilder) build(index int) error {
 		} else {
 			logrus.Info("Found cached layer")
 		}
-	}
-
-	if err := cacheGroup.Wait(); err != nil {
-		logrus.Warnf("error uploading layer to cache: %s", err)
 	}
 
 	return nil
@@ -633,6 +628,8 @@ func DoBuild(opts *config.KanikoOptions) (v1.Image, error) {
 		return nil, err
 	}
 
+	cacheGroup := errgroup.Group{}
+
 	for index, stage := range stages {
 		sb, err := newStageBuilder(opts, stage, crossStageDependencies[index], sourceStages)
 		if err != nil {
@@ -641,7 +638,7 @@ func DoBuild(opts *config.KanikoOptions) (v1.Image, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := sb.build(index); err != nil {
+		if err := sb.build(index, &cacheGroup); err != nil {
 			return nil, errors.Wrap(err, "error building stage")
 		}
 		reviewConfig(stage, &sb.cf.Config)
@@ -664,6 +661,9 @@ func DoBuild(opts *config.KanikoOptions) (v1.Image, error) {
 				if err = util.DeleteFilesystem(); err != nil {
 					return nil, err
 				}
+			}
+			if err := cacheGroup.Wait(); err != nil {
+				logrus.Warnf("error uploading layer to cache: %s", err)
 			}
 			timing.DefaultRun.Stop(t)
 			return sourceImage, nil
